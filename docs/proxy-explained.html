@@ -1,0 +1,1000 @@
+<meta charset="utf-8">
+<title>代理合约图解</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Noto+Sans+SC:wght@400;500;700&display=swap">
+<style>
+/* 设计方向：交换机 / 接线台。
+   冷灰纸面 + 墨蓝前景；琥珀 = 实现地址（便利贴），蓝 = 代码，青 = 存储。 */
+:root {
+  --bg: #edf0f3;
+  --surface: #f8fafc;
+  --surface-2: #e3e8ee;
+  --fg: #111821;
+  --muted: #566272;
+  --line: #c7d0da;
+  --line-strong: #93a2b3;
+  --slot: #a8540a;
+  --slot-soft: #f3dfc9;
+  --code: #1f4fbf;
+  --code-soft: #dbe4f9;
+  --data: #0f6b62;
+  --data-soft: #d3ebe7;
+  --danger: #a32020;
+  --danger-soft: #f6dada;
+  --ok: #1c6b3a;
+  --ok-soft: #d9eddf;
+  --font-sans: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --shadow: 0 1px 0 rgba(17, 24, 33, 0.04), 0 10px 30px rgba(17, 24, 33, 0.06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1017;
+    --surface: #131b25;
+    --surface-2: #1b2531;
+    --fg: #e7edf4;
+    --muted: #9aa8b8;
+    --line: #26323f;
+    --line-strong: #4a5a6b;
+    --slot: #f2b26b;
+    --slot-soft: #3a2a17;
+    --code: #8cb0ff;
+    --code-soft: #1a2745;
+    --data: #6fd3c5;
+    --data-soft: #12312e;
+    --danger: #f08a8a;
+    --danger-soft: #3a1c1c;
+    --ok: #7fd39a;
+    --ok-soft: #16301f;
+    --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 14px 36px rgba(0, 0, 0, 0.32);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1017;
+  --surface: #131b25;
+  --surface-2: #1b2531;
+  --fg: #e7edf4;
+  --muted: #9aa8b8;
+  --line: #26323f;
+  --line-strong: #4a5a6b;
+  --slot: #f2b26b;
+  --slot-soft: #3a2a17;
+  --code: #8cb0ff;
+  --code-soft: #1a2745;
+  --data: #6fd3c5;
+  --data-soft: #12312e;
+  --danger: #f08a8a;
+  --danger-soft: #3a1c1c;
+  --ok: #7fd39a;
+  --ok-soft: #16301f;
+  --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 14px 36px rgba(0, 0, 0, 0.32);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 17px;
+  line-height: 1.75;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-bottom: 3rem;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1060px; margin-inline: auto; }
+
+/* ---------- 头部 ---------- */
+.masthead { padding-block: clamp(2.4rem, 6vw, 4.2rem) 2rem; border-bottom: 1px solid var(--line); }
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 1rem;
+}
+h1 {
+  font-size: clamp(2.2rem, 6.2vw, 3.7rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+  margin: 0 0 1rem;
+  text-wrap: balance;
+}
+.lede { max-width: 60ch; margin: 0; color: var(--muted); font-size: clamp(1rem, 2.2vw, 1.12rem); }
+.legend { display: flex; flex-wrap: wrap; gap: 0.55rem 1.4rem; margin-top: 1.6rem; font-size: 0.85rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 0.45rem; }
+.swatch { width: 0.95rem; height: 0.95rem; border-radius: 3px; display: inline-block; border: 1px solid; }
+.swatch-slot { background: var(--slot-soft); border-color: var(--slot); }
+.swatch-code { background: var(--code-soft); border-color: var(--code); }
+.swatch-data { background: var(--data-soft); border-color: var(--data); }
+
+/* ---------- 通用版式 ---------- */
+section { padding-block: clamp(2.6rem, 6vw, 4rem); border-bottom: 1px solid var(--line); }
+section:last-of-type { border-bottom: 0; }
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--slot);
+  margin: 0 0 0.6rem;
+}
+h2 { font-size: clamp(1.5rem, 3.4vw, 2.05rem); line-height: 1.3; margin: 0 0 0.9rem; text-wrap: balance; }
+h3 { font-size: 1.08rem; line-height: 1.4; margin: 0 0 0.4rem; }
+p { max-width: 68ch; margin: 0 0 1rem; }
+p:last-child { margin-bottom: 0; }
+strong { font-weight: 700; }
+em { font-style: normal; color: var(--slot); font-weight: 500; }
+code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--surface-2);
+  border-radius: 4px;
+  padding: 0.08em 0.35em;
+  word-break: break-word;
+}
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 0.86rem; }
+
+/* ---------- 图示 ---------- */
+figure.diagram { margin: 1.4rem 0 0; }
+.diagram-frame {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  box-shadow: var(--shadow);
+}
+.diagram-scroll { overflow-x: auto; }
+.diagram-scroll > svg { display: block; width: 100%; min-width: 620px; height: auto; }
+figcaption { color: var(--muted); font-size: 0.86rem; margin-top: 0.7rem; max-width: 70ch; }
+.diagram text { font-family: var(--font-sans); fill: var(--fg); }
+.diagram .mono-text { font-family: var(--font-mono); }
+.diagram .box { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1.4; }
+.diagram .box-soft { fill: var(--surface-2); stroke: var(--line); }
+.diagram .box-slot { fill: var(--slot-soft); stroke: var(--slot); }
+.diagram .box-code { fill: var(--code-soft); stroke: var(--code); }
+.diagram .box-data { fill: var(--data-soft); stroke: var(--data); }
+.diagram .flow-line { fill: none; stroke: var(--line-strong); stroke-width: 1.6; marker-end: url(#arrow); }
+.diagram .flow-line-back { fill: none; stroke: var(--line-strong); stroke-width: 1.4; stroke-dasharray: 5 5; marker-end: url(#arrow); }
+.diagram .is-active.box { stroke: var(--slot); stroke-width: 2.6; }
+.diagram .is-active.flow-line, .diagram .is-active.flow-line-back { stroke: var(--slot); marker-end: url(#arrow-hot); }
+.diagram text.is-active { fill: var(--slot); font-weight: 700; }
+.diagram .dim { opacity: 0.28; }
+.diagram .thin { stroke-width: 1; }
+
+/* ---------- 卡片与提示 ---------- */
+.callout {
+  border-left: 3px solid var(--slot);
+  background: var(--surface);
+  border-radius: 0 10px 10px 0;
+  padding: 0.9rem 1.15rem;
+  margin: 1.3rem 0 0;
+  max-width: 72ch;
+}
+.callout p { margin: 0; }
+.note {
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
+  margin: 1.2rem 0 0;
+  max-width: 72ch;
+  font-size: 0.92rem;
+}
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr)); gap: 1rem; margin-top: 1.4rem; }
+.cards-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 700px) { .cards-2 { grid-template-columns: 1fr; } }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1.05rem 1.15rem;
+  box-shadow: var(--shadow);
+}
+.card p { font-size: 0.93rem; margin-bottom: 0.45rem; }
+.card p:last-child { margin-bottom: 0; }
+.tag {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 0.35rem;
+}
+.bad { color: var(--danger); }
+.good { color: var(--ok); }
+
+/* ---------- 部署时间线 ---------- */
+.timeline { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 1rem; margin-top: 1.4rem; }
+.step-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 1rem 1.1rem; position: relative; }
+.step-card .num {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--slot);
+  letter-spacing: 0.1em;
+}
+.step-card p { font-size: 0.9rem; margin: 0.4rem 0 0; }
+.slot-readout {
+  margin-top: 1.2rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  overflow-x: auto;
+}
+.slot-readout .label { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.35rem; }
+.slot-readout .hex { font-family: var(--font-mono); font-size: 0.82rem; white-space: nowrap; }
+.slot-readout .hit { background: var(--slot-soft); color: var(--slot); padding: 0.1em 0.2em; border-radius: 3px; }
+.code-chain { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem; margin-top: 1.1rem; }
+.code-step { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.85rem 0.95rem; min-width: 0; }
+.code-step .tag { margin-bottom: 0.25rem; }
+.code-step pre { margin: 0; padding: 0; background: none; border: 0; font-size: 0.76rem; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
+.code-step code { background: none; padding: 0; font-size: inherit; }
+.tx-layout { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.2rem; }
+.tx-seg { flex: 1 1 200px; min-width: 0; padding: 0.75rem 0.9rem; border-radius: 8px; border: 1px solid; font-size: 0.84rem; line-height: 1.6; }
+.tx-seg-code { background: var(--surface-2); border-color: var(--line-strong); }
+.tx-seg-slot { background: var(--slot-soft); border-color: var(--slot); }
+.tx-seg-data { background: var(--code-soft); border-color: var(--code); }
+.tx-seg .mono { font-size: 0.78rem; word-break: break-word; }
+
+/* ---------- 调用步骤 ---------- */
+.stepper { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.7fr); gap: 1.4rem; align-items: start; margin-top: 1.2rem; }
+@media (max-width: 860px) { .stepper { grid-template-columns: 1fr; } }
+.step-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.2rem; box-shadow: var(--shadow); }
+.step-counter { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.1em; color: var(--muted); }
+.step-title { font-size: 1.15rem; font-weight: 700; margin: 0.35rem 0 0.5rem; }
+.step-body { font-size: 0.95rem; margin: 0; min-height: 7.5em; }
+.step-controls { display: flex; align-items: center; gap: 0.6rem; margin-top: 1rem; }
+.dots { display: flex; gap: 0.3rem; flex: 1; }
+.dot { height: 4px; flex: 1; background: var(--line); border-radius: 2px; transition: background 0.2s; }
+.dot.done { background: var(--slot); }
+.btn {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.48rem 0.95rem;
+  border-radius: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.btn:hover { border-color: var(--slot); }
+.btn:focus-visible { outline: 2px solid var(--slot); outline-offset: 2px; }
+.btn[disabled] { opacity: 0.35; cursor: not-allowed; }
+.btn-primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.btn-primary:hover { background: var(--slot); border-color: var(--slot); color: #fff; }
+@media (prefers-color-scheme: dark) { .btn-primary:hover { color: #111; } }
+
+/* ---------- 对比表 ---------- */
+.table-scroll { overflow-x: auto; margin-top: 1.3rem; }
+table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: 0.92rem; }
+th, td { text-align: left; padding: 0.65rem 0.8rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.76rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td.mono, th.mono { font-family: var(--font-mono); font-size: 0.84rem; }
+tr:last-child td { border-bottom: 0; }
+.pill { display: inline-block; font-family: var(--font-mono); font-size: 0.75rem; padding: 0.12em 0.5em; border-radius: 999px; border: 1px solid; }
+.pill-code { color: var(--code); border-color: var(--code); background: var(--code-soft); }
+.pill-data { color: var(--data); border-color: var(--data); background: var(--data-soft); }
+.pill-slot { color: var(--slot); border-color: var(--slot); background: var(--slot-soft); }
+
+/* ---------- 升级演示 ---------- */
+.upgrade-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 1.4rem; align-items: start; margin-top: 1.2rem; }
+@media (max-width: 860px) { .upgrade-grid { grid-template-columns: 1fr; } }
+.upgrade-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 1.1rem 1.2rem; box-shadow: var(--shadow); }
+.upgrade-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem; margin-top: 1rem; }
+.chip { font-family: var(--font-mono); font-size: 0.78rem; padding: 0.15em 0.55em; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
+.storage-table { margin-top: 1rem; min-width: 0; }
+.storage-row { transition: background 0.5s; }
+.storage-row.flash { animation: flashRow 0.9s ease-out; }
+@keyframes flashRow { 0% { background: var(--slot-soft); } 100% { background: transparent; } }
+.storage-table td:first-child { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); white-space: nowrap; }
+.storage-table td:last-child { font-family: var(--font-mono); font-size: 0.84rem; }
+
+/* ---------- 自测 ---------- */
+.quiz { margin-top: 1.3rem; display: grid; gap: 0.7rem; max-width: 72ch; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.8rem 1rem; }
+summary { cursor: pointer; font-weight: 500; }
+summary:focus-visible { outline: 2px solid var(--slot); outline-offset: 3px; border-radius: 4px; }
+details p { margin: 0.7rem 0 0; font-size: 0.93rem; }
+
+/* ---------- 口诀 ---------- */
+.mnemonic { font-size: clamp(1.2rem, 3vw, 1.6rem); line-height: 1.65; letter-spacing: 0.01em; margin: 0.8rem 0 1.4rem; }
+.mnemonic strong { color: var(--slot); }
+.action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 0.9rem; }
+.action { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0.9rem 1rem; }
+.action b { display: block; font-size: 0.95rem; margin-bottom: 0.2rem; }
+.action span { font-size: 0.88rem; color: var(--muted); }
+
+footer { padding-top: 2.5rem; color: var(--muted); font-size: 0.85rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  html { scroll-behavior: auto; }
+}
+</style>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="kicker">ERC-1967 · UUPS · delegatecall</p>
+    <h1>代理合约图解</h1>
+    <p class="lede">从一次 <code>bid()</code> 调用出发，看清代理、实现合约和存储之间到底发生了什么。所有数字来自本地 Hardhat 节点的一次真实部署。</p>
+    <div class="legend" aria-label="颜色图例">
+      <span><i class="swatch swatch-slot"></i>琥珀：实现地址（便利贴）</span>
+      <span><i class="swatch swatch-code"></i>蓝色：代码</span>
+      <span><i class="swatch swatch-data"></i>青色：存储</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ========== 0. 比喻 ========== -->
+    <section id="metaphor">
+      <p class="eyebrow">00 / 先建立一个比喻</p>
+      <h2>代理就是公司前台</h2>
+      <p>客户只认「1 楼前台」这个地址。前台自己不办业务，桌上有一张便利贴，写着业务部现在在哪个房间。客户来了，前台照着便利贴把人和资料带过去。</p>
+
+      <figure class="diagram">
+        <div class="diagram-frame">
+          <div class="diagram-scroll">
+            <svg viewBox="0 0 880 270" role="img" aria-label="客户只找前台，前台按便利贴上写的地址把请求转给业务部">
+              <defs>
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line-strong)"></path>
+                </marker>
+                <marker id="arrow-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--slot)"></path>
+                </marker>
+              </defs>
+
+              <rect class="box" x="24" y="92" width="170" height="86" rx="10"></rect>
+              <text x="109" y="128" text-anchor="middle" font-size="16" font-weight="700">客户</text>
+              <text x="109" y="150" text-anchor="middle" font-size="13" fill="var(--muted)">用户 / 钱包</text>
+
+              <line class="flow-line" x1="196" y1="135" x2="282" y2="135"></line>
+              <text x="239" y="122" text-anchor="middle" font-size="12" fill="var(--muted)">只认前台地址</text>
+
+              <rect class="box" x="284" y="42" width="320" height="186" rx="14"></rect>
+              <text x="306" y="72" font-size="16" font-weight="700">前台 = 代理合约</text>
+              <text x="306" y="92" font-size="12" fill="var(--muted)">地址永远不变</text>
+              <rect class="box-slot" x="306" y="108" width="276" height="92" rx="8"></rect>
+              <text x="324" y="134" font-size="13" font-weight="700" fill="var(--slot)">便利贴</text>
+              <text x="324" y="156" font-size="13">业务部 → 3 楼 301</text>
+              <text x="324" y="178" font-size="12" fill="var(--muted)">= 实现合约的地址</text>
+
+              <line class="flow-line" x1="606" y1="135" x2="678" y2="135"></line>
+              <text x="642" y="122" text-anchor="middle" font-size="12" fill="var(--muted)">转接</text>
+
+              <rect class="box-code" x="680" y="92" width="176" height="86" rx="10"></rect>
+              <text x="768" y="128" text-anchor="middle" font-size="16" font-weight="700">业务部</text>
+              <text x="768" y="150" text-anchor="middle" font-size="13" fill="var(--muted)">实现合约</text>
+            </svg>
+          </div>
+        </div>
+        <figcaption>换业务部时，只改便利贴上的房间号。客户仍然找 1 楼前台，完全不用知道业务部搬去了哪里。</figcaption>
+      </figure>
+
+      <div class="callout">
+        <p>这个比喻里的四个东西，和代码里一一对应：前台 = 代理合约（地址不变）；便利贴 = <code>0x3608…</code> 存储槽；房间号 = 实现合约地址；换房间 = 升级。</p>
+      </div>
+    </section>
+
+    <!-- ========== 1. 部署 ========== -->
+    <section id="deploy">
+      <p class="eyebrow">01 / 部署</p>
+      <h2>地址是怎么被写进便利贴的</h2>
+      <p>代理不是「认识」<code>NFTAuctionMarket</code> 这个名字，它只认识一个 <strong>20 字节的地址</strong>。这个地址是部署时作为构造参数传进去的。</p>
+
+      <div class="timeline">
+        <div class="step-card">
+          <span class="num">STEP 1</span>
+          <h3>先部署实现合约</h3>
+          <p>得到地址 <span class="mono">0x9fE4…a6e0</span>。这份合约自己也有存储，但以后没人会用它，它只提供代码。</p>
+        </div>
+        <div class="step-card">
+          <span class="num">STEP 2</span>
+          <h3>再部署代理</h3>
+          <p><span class="mono">new NFTAuctionMarketProxy(0x9fE4…, initData)</span>。代理源码里只看到 <code>address implementation</code>，看不到合约名。</p>
+        </div>
+        <div class="step-card">
+          <span class="num">STEP 3</span>
+          <h3>构造函数写槽并初始化</h3>
+          <p>父合约 <code>ERC1967Proxy</code> 把地址写进固定槽，然后 <code>delegatecall</code> 一次 <code>initialize()</code>，把 owner 等初始值写进代理存储。</p>
+        </div>
+      </div>
+
+      <h3 style="margin-top:2rem">地址是显式传入的：三段代码接起来看</h3>
+      <p>你可能觉得「代理源码里没提 NFTAuctionMarket，怎么算显式」。其实地址一直在传，只是分了三层：</p>
+
+      <div class="code-chain">
+        <div class="code-step">
+          <span class="tag">① ignition 部署脚本</span>
+          <pre><code>const impl =
+  m.contract("NFTAuctionMarket");
+// 先拿到实现合约地址
+
+const proxy = m.contract(
+  "NFTAuctionMarketProxy",
+  [impl, initializeData]  // ← 传入
+);</code></pre>
+        </div>
+        <div class="code-step">
+          <span class="tag">② 你的代理合约</span>
+          <pre><code>constructor(
+  address implementation,
+  bytes memory data
+)
+  ERC1967Proxy(implementation, data)
+  payable {}
+// 收到的地址原样交给父合约</code></pre>
+        </div>
+        <div class="code-step">
+          <span class="tag">③ OZ 父合约</span>
+          <pre><code>constructor(
+  address implementation,
+  bytes memory _data
+) payable {
+  ...
+  ERC1967Utils.upgradeToAndCall(
+    implementation, _data);
+}
+// 内部 _setImplementation()
+// slot 0x3608… = 地址</code></pre>
+        </div>
+      </div>
+
+      <div class="tx-layout" aria-label="部署交易的组成部分">
+        <div class="tx-seg tx-seg-code"><strong>代理字节码</strong><br><span class="small muted">代理合约本身的代码</span></div>
+        <div class="tx-seg tx-seg-slot"><strong>参数 1</strong><br><span class="mono">implementation = 0x9fE4…</span></div>
+        <div class="tx-seg tx-seg-data"><strong>参数 2</strong><br><span class="mono">initialize 的 calldata</span></div>
+      </div>
+      <p class="small muted" style="margin-top:0.7rem">一笔合约创建交易 = 字节码 + ABI 编码后的构造参数。在 Etherscan 的创建交易里展开 “Constructor Arguments”，就能直接看到这个地址。</p>
+
+      <div class="slot-readout">
+        <div class="label">部署完成后，读代理的 <span class="mono">0x3608…bbc</span> 槽，真实值是：</div>
+        <div class="hex">0x000000000000000000000000<span class="hit">9fe46736679d2d9a65f0992f2272de9f3c7fa6e0</span></div>
+      </div>
+      <p class="small muted" style="margin-top:0.8rem">高亮的那 20 字节就是实现合约地址。实现合约自己的这个槽是空的：<span class="mono">0x0000…0000</span>，因为它不是代理。</p>
+
+      <div class="note">
+        <strong>为什么源码里不需要 import？</strong> 因为 <code>address</code> 只是一个数字类型。快递单上写「XX 路 301」，快递员不需要认识那栋楼里的人。代理运行时要的是地址，不是合约类型。
+      </div>
+    </section>
+
+    <!-- ========== 2. 调用 ========== -->
+    <section id="call">
+      <p class="eyebrow">02 / 调用</p>
+      <h2>一次 <code>bid()</code> 的五步旅程</h2>
+      <p>点「下一步」逐步看。左侧是流程，右侧是每一步在代码里对应什么。</p>
+
+      <div class="stepper">
+        <figure class="diagram" style="margin:0">
+          <div class="diagram-frame">
+            <div class="diagram-scroll">
+              <svg viewBox="0 0 880 548" role="img" aria-label="用户调用代理，代理进入 fallback 读取实现地址，再用 delegatecall 转发到实现合约执行">
+                <defs>
+                  <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line-strong)"></path>
+                  </marker>
+                  <marker id="arrow2-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--slot)"></path>
+                  </marker>
+                </defs>
+
+                <!-- 用户 -->
+                <g data-step="1">
+                  <rect class="box" x="300" y="12" width="280" height="66" rx="10"></rect>
+                  <text x="440" y="41" text-anchor="middle" font-size="16" font-weight="700">用户</text>
+                  <text x="440" y="62" text-anchor="middle" font-size="13" fill="var(--muted)">发起 bid(1, 1 ETH)</text>
+                </g>
+
+                <g data-step="1">
+                  <line class="flow-line" x1="440" y1="80" x2="440" y2="116"></line>
+                  <text x="452" y="103" font-size="13" fill="var(--muted)">① 目标是代理地址 0xCf7E…</text>
+                </g>
+
+                <!-- 代理 -->
+                <g>
+                  <rect class="box" x="84" y="120" width="712" height="248" rx="14"></rect>
+                  <text x="106" y="148" font-size="15" font-weight="700">代理 P <tspan class="mono-text" font-weight="400" fill="var(--muted)">0xCf7E…</tspan></text>
+                </g>
+                <g data-step="4">
+                  <rect class="box" x="84" y="120" width="712" height="248" rx="14" fill="none"></rect>
+                </g>
+
+                <g data-step="2">
+                  <rect class="box-soft" x="112" y="164" width="656" height="58" rx="8"></rect>
+                  <text x="130" y="189" font-size="15" font-weight="700">分发器</text>
+                  <text x="130" y="210" font-size="13" fill="var(--muted)">按 calldata 前 4 字节找函数 → 没有 bid()</text>
+                </g>
+
+                <g data-step="3">
+                  <line class="flow-line" x1="272" y1="224" x2="272" y2="246"></line>
+                  <text x="284" y="242" font-size="12" fill="var(--muted)">② 兜底</text>
+                  <rect class="box" x="112" y="248" width="280" height="66" rx="8"></rect>
+                  <text x="130" y="275" font-size="15" font-weight="700">fallback()</text>
+                  <text x="130" y="296" font-size="12" fill="var(--muted)">代理里唯一的入口</text>
+                </g>
+
+                <g data-step="3">
+                  <line class="flow-line" x1="394" y1="281" x2="462" y2="281"></line>
+                  <text x="428" y="272" text-anchor="middle" font-size="12" fill="var(--muted)">③</text>
+                  <rect class="box-slot" x="466" y="248" width="302" height="66" rx="8"></rect>
+                  <text x="484" y="275" font-size="14" font-weight="700">槽 0x3608… = 0x9fE4…</text>
+                  <text x="484" y="296" font-size="12" fill="var(--muted)">便利贴：实现合约地址</text>
+                </g>
+
+                <g data-step="4">
+                  <line class="flow-line" x1="440" y1="370" x2="440" y2="426"></line>
+                  <text x="452" y="404" font-size="13" fill="var(--muted)">④ delegatecall（原始 calldata 原样转发）</text>
+                </g>
+
+                <g data-step="5">
+                  <rect class="box-code" x="190" y="430" width="500" height="92" rx="12"></rect>
+                  <text x="210" y="461" font-size="15" font-weight="700">实现合约 I <tspan class="mono-text" font-weight="400">0x9fE4…</tspan></text>
+                  <text x="210" y="484" font-size="13">⑤ 找到并执行 bid()</text>
+                  <text x="210" y="505" font-size="13" fill="var(--muted)">读写的却是代理的存储 · address(this) 也是代理</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+        </figure>
+
+        <div class="step-panel">
+          <div class="dots" aria-hidden="true">
+            <i class="dot done"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i><i class="dot"></i>
+          </div>
+          <div class="step-counter" id="step-counter" style="margin-top:0.8rem">第 1 / 5 步</div>
+          <div class="step-title" id="step-title">用户调用 bid()</div>
+          <p class="step-body" id="step-body" aria-live="polite">用户在钱包里点「出价」。交易的目标地址是代理 P，不是实现合约。用户永远只跟代理打交道。</p>
+          <div class="step-controls">
+            <button class="btn" id="prev" type="button">上一步</button>
+            <button class="btn btn-primary" id="next" type="button">下一步</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="note" style="max-width:none">
+        <strong>第 2 步的底层细节：</strong>Solidity 编译后的字节码开头是一段分发器，拿 <code>msg.sig</code>（calldata 前 4 字节）逐个和函数选择器比对。代理的 ABI 里只有构造器和 <code>fallback</code>，所以任何业务调用都匹配不上，必然掉进 fallback。
+      </div>
+    </section>
+
+    <!-- ========== 3. delegatecall ========== -->
+    <section id="delegatecall">
+      <p class="eyebrow">03 / 核心机制</p>
+      <h2><code>delegatecall</code> 到底共享什么</h2>
+      <p>这是理解代理的唯一门槛。一句话：<strong>代码从实现合约借来执行，但所有的身份和记忆都留在代理身上。</strong></p>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>维度</th><th><code>call</code></th><th><code>delegatecall</code></th></tr>
+          </thead>
+          <tbody>
+            <tr><td>执行谁的代码</td><td>被调用合约</td><td>被调用合约</td></tr>
+            <tr><td>用谁的存储</td><td><span class="pill pill-data">被调用合约</span></td><td><span class="pill pill-data">调用者（代理）</span></td></tr>
+            <tr><td><code>msg.sender</code></td><td>当前合约</td><td><span class="pill pill-slot">原始用户</span></td></tr>
+            <tr><td><code>msg.value</code></td><td>可以重新指定</td><td>原样保留</td></tr>
+            <tr><td><code>address(this)</code></td><td>被调用合约</td><td><span class="pill pill-slot">代理地址</span></td></tr>
+            <tr><td>合约余额</td><td>被调用合约</td><td><span class="pill pill-slot">代理地址</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p style="margin-top:1.3rem">本地实测的四行数据，把这件事坐实了：</p>
+
+      <div class="cards cards-2">
+        <div class="card">
+          <span class="tag">SAME CODE, DIFFERENT STORAGE</span>
+          <h3>通过代理读 <code>owner()</code></h3>
+          <p class="mono">0xf39F…2266</p>
+          <p class="small muted">部署时通过 <code>initialize</code> 写进代理存储</p>
+        </div>
+        <div class="card">
+          <span class="tag">SAME CODE, DIFFERENT STORAGE</span>
+          <h3>直接读实现 <code>owner()</code></h3>
+          <p class="mono">0x0000…0000</p>
+          <p class="small muted">同一个函数，另一套存储，所以是零地址</p>
+        </div>
+        <div class="card">
+          <span class="tag">STATE LIVES ON THE PROXY</span>
+          <h3>通过代理创建拍卖后</h3>
+          <p>代理 <code>slot 0</code> 原始值 = <span class="mono">0x…0001</span></p>
+          <p class="small muted">正是 <code>auctionCount</code> 的值，数据写在了代理身上</p>
+        </div>
+        <div class="card">
+          <span class="tag">IDENTITY LIVES ON THE PROXY</span>
+          <h3>NFT 的 owner</h3>
+          <p class="mono">0xCf7E…F0c9</p>
+          <p class="small muted">就是代理地址，因为 <code>address(this)</code> 是代理</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><code>version()</code> 在两边都返回 <code>"v1"</code>，因为它是 <code>pure</code> 函数，不读存储。这反而说明：<strong>代码是同一份，差别只在存储和身份。</strong></p>
+      </div>
+    </section>
+
+    <!-- ========== 4. 升级 ========== -->
+    <section id="upgrade">
+      <p class="eyebrow">04 / 升级</p>
+      <h2>升级只改便利贴上的号码</h2>
+      <p>升级只改便利贴上的号码。先搞清楚<strong>是谁把号码改掉的</strong>，再自己动手。</p>
+
+      <h3 style="margin-top:2rem">代理里没有修改地址的源码，那是谁改的？</h3>
+      <p>你的 <code>NFTAuctionMarketProxy.sol</code> 里确实没有任何升级函数。<strong>改地址的代码住在实现合约里</strong>，通过 <code>delegatecall</code> 执行，所以写进去的是代理的存储。</p>
+
+      <figure class="diagram">
+        <div class="diagram-frame">
+          <div class="diagram-scroll">
+            <svg viewBox="0 0 880 530" role="img" aria-label="owner 调用升级函数，代理转发给实现合约，实现里的 UUPS 代码把新地址写进代理的存储槽">
+              <defs>
+                <marker id="arrow5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line-strong)"></path>
+                </marker>
+                <marker id="arrow5-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                  <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--slot)"></path>
+                </marker>
+              </defs>
+
+              <rect class="box" x="200" y="12" width="480" height="58" rx="10"></rect>
+              <text x="440" y="38" text-anchor="middle" font-size="15" font-weight="700">owner 调用 upgradeToAndCall(V2, data)</text>
+              <text x="440" y="58" text-anchor="middle" font-size="12" fill="var(--muted)">目标地址：代理 P</text>
+
+              <line class="flow-line" x1="440" y1="72" x2="440" y2="108"></line>
+              <text x="452" y="95" font-size="12" fill="var(--muted)">① 代理没有这个函数</text>
+
+              <rect class="box" x="160" y="110" width="560" height="76" rx="10"></rect>
+              <text x="440" y="138" text-anchor="middle" font-size="15" font-weight="700">代理 P → fallback() → delegatecall</text>
+              <text x="440" y="160" text-anchor="middle" font-size="12" fill="var(--muted)">把调用原样转给当前实现 V1</text>
+
+              <line class="flow-line" x1="440" y1="188" x2="440" y2="228"></line>
+              <text x="452" y="212" font-size="12" fill="var(--muted)">② 执行的是 V1 的代码</text>
+
+              <rect class="box-code" x="100" y="230" width="680" height="196" rx="12"></rect>
+              <text x="120" y="258" font-size="15" font-weight="700">V1 实现里的 UUPSUpgradeable</text>
+              <text x="120" y="290" font-size="13">upgradeToAndCall(V2, data)  <tspan fill="var(--muted)">onlyProxy</tspan></text>
+              <text x="140" y="316" font-size="13">→ _authorizeUpgrade(V2)  <tspan fill="var(--muted)">只有 owner 能通过</tspan></text>
+              <text x="140" y="342" font-size="13">→ _upgradeToAndCallUUPS(V2, data)</text>
+              <text x="140" y="368" font-size="13">→ _setImplementation(V2)</text>
+              <rect class="box-slot" x="136" y="382" width="420" height="34" rx="6"></rect>
+              <text x="152" y="404" font-size="13" font-weight="700">SSTORE  0x3608… = 0x5FC8…</text>
+
+              <line class="flow-line" x1="440" y1="428" x2="440" y2="462"></line>
+              <text x="452" y="450" font-size="12" fill="var(--muted)">③ 这条 SSTORE 作用在代理的存储上</text>
+
+              <rect class="box-data" x="230" y="464" width="420" height="52" rx="8"></rect>
+              <text x="440" y="496" text-anchor="middle" font-size="14" font-weight="700">代理存储 · 0x3608… 槽 = V2</text>
+            </svg>
+          </div>
+        </div>
+        <figcaption>owner 对代理调用 upgradeToAndCall，代理转发给当前实现；实现里的 UUPS 代码把新地址写进代理的存储槽。代理自己的代码一行都没动。</figcaption>
+      </figure>
+
+      <div class="code-chain" style="margin-top:1.2rem">
+        <div class="code-step">
+          <span class="tag">实现合约继承了什么</span>
+          <pre><code>// NFTAuctionMarket.sol:13
+contract NFTAuctionMarket is
+  Initializable,
+  UUPSUpgradeable,
+  OwnableUpgradeable
+// ↑ 来自 UUPSUpgradeable</code></pre>
+        </div>
+        <div class="code-step">
+          <span class="tag">升级函数（OZ 提供）</span>
+          <pre><code>function upgradeToAndCall(
+  address newImpl, bytes memory data
+) public payable virtual onlyProxy {
+  _authorizeUpgrade(newImpl);
+  // 你的实现：onlyOwner
+  _upgradeToAndCallUUPS(newImpl, data);
+}</code></pre>
+        </div>
+        <div class="code-step">
+          <span class="tag">真正写槽的一行</span>
+          <pre><code>// ERC1967Utils
+_setImplementation(newImpl);
+
+// 内部等价于：
+// StorageSlot.getAddressSlot(
+//   0x3608…).value = newImpl;
+
+// 一条 SSTORE 指令</code></pre>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><strong>关键：</strong><code>_setImplementation</code> 里是一条 <code>SSTORE</code> 指令。因为整段代码是通过 <code>delegatecall</code> 执行的，EVM 把这条指令作用在<strong>代理的存储</strong>上，而不是实现合约自己的存储。所以代理的代码一行没改，但它存的那格地址变了。</p>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr><th>代理的代码</th><th>代理的存储</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>部署后永远不变</td><td>一直在变</td></tr>
+            <tr><td>没有任何升级函数</td><td><code>0x3608…</code> 槽、owner、auctions…</td></tr>
+            <tr><td>升级时一个字节都不动</td><td>升级时只有 <code>0x3608…</code> 这一格被写</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top:2rem">自己动手：升级 / 回滚</h3>
+      <p>点一下按钮，看代理指向从 V1 换成 V2。注意右侧存储表格：<strong>一个字节都不会变。</strong></p>
+
+      <div class="upgrade-grid">
+        <figure class="diagram" style="margin:0">
+          <div class="diagram-frame">
+            <div class="diagram-scroll">
+              <svg viewBox="0 0 880 360" role="img" aria-label="代理的存储槽从指向 V1 实现变为指向 V2 实现，而代理存储保持不变">
+                <defs>
+                  <marker id="arrow3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line-strong)"></path>
+                  </marker>
+                  <marker id="arrow3-hot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                    <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--slot)"></path>
+                  </marker>
+                </defs>
+
+                <rect class="box" x="50" y="112" width="300" height="150" rx="12"></rect>
+                <text x="70" y="143" font-size="16" font-weight="700">代理 P</text>
+                <text x="70" y="164" font-size="12" fill="var(--muted)">地址永远不变 0xCf7E…</text>
+                <rect class="box-slot" x="70" y="182" width="260" height="60" rx="8"></rect>
+                <text x="86" y="205" font-size="12" fill="var(--muted)">槽 0x3608…</text>
+                <text x="86" y="228" font-size="14" font-weight="700" id="slot-value">= 0x9fE4…</text>
+
+                <polyline class="flow-line is-active" id="link-v1" points="350,212 470,212 470,92 606,92"></polyline>
+                <polyline class="flow-line" id="link-v2" points="350,212 470,212 470,268 606,268"></polyline>
+
+                <g id="v1-card">
+                  <rect class="box-code" x="608" y="48" width="222" height="90" rx="10"></rect>
+                  <text x="626" y="78" font-size="15" font-weight="700">V1 实现</text>
+                  <text x="626" y="100" font-size="12" class="mono-text" fill="var(--muted)">0x9fE4…</text>
+                  <text x="626" y="121" font-size="12" fill="var(--muted)">version() = v1</text>
+                </g>
+                <g id="v2-card" class="dim">
+                  <rect class="box-code" x="608" y="224" width="222" height="90" rx="10"></rect>
+                  <text x="626" y="254" font-size="15" font-weight="700">V2 实现</text>
+                  <text x="626" y="276" font-size="12" class="mono-text" fill="var(--muted)">0x5FC8…</text>
+                  <text x="626" y="297" font-size="12" fill="var(--muted)">version() = v2</text>
+                </g>
+              </svg>
+            </div>
+          </div>
+          <figcaption>升级改的是代理存储里那一格地址，不是代理合约的代码，也不是拍卖数据。</figcaption>
+        </figure>
+
+        <div class="upgrade-panel">
+          <div class="upgrade-controls">
+            <button class="btn btn-primary" id="upgrade-toggle" type="button" aria-pressed="false">升级到 V2 →</button>
+            <span class="chip" id="version-chip">version() = v1</span>
+          </div>
+
+          <div class="table-scroll">
+            <table class="storage-table">
+              <caption class="small muted" style="text-align:left; padding-bottom:0.4rem">代理存储（升级前后对比）</caption>
+              <tbody>
+                <tr class="storage-row"><td>auctionCount</td><td>1</td></tr>
+                <tr class="storage-row"><td>auctions[0].seller</td><td>0x7099…79C8</td></tr>
+                <tr class="storage-row"><td>auctions[0].endTime</td><td>1792695953</td></tr>
+                <tr class="storage-row"><td>owner</td><td>0xf39F…2266</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small muted" style="margin-top:0.8rem">每一行在切换时闪一下，只是提醒你去核对；值没有变化。</p>
+        </div>
+      </div>
+
+      <div class="note">
+        <strong>为什么升级不会丢数据？</strong>V1 和 V2 读的是同一批存储槽。V2 只是在 V1 的变量后面追加了 <code>highValueFeeBps</code> 和 <code>highValueThreshold</code>，老格子的含义完全没动。三条铁律：只追加、不删除、不改类型和顺序。
+      </div>
+    </section>
+
+    <!-- ========== 5. 出错 ========== -->
+    <section id="failures">
+      <p class="eyebrow">05 / 升级之后</p>
+      <h2>旧的函数或数据出错了怎么办</h2>
+      <p>先把问题分成几类，处理方式完全不同。核心认知：<strong>升级换的是代码来源，不会自动修数据。</strong></p>
+
+      <div class="cards">
+        <div class="card">
+          <span class="tag">A · 单笔调用</span>
+          <h3>某一笔交易 revert</h3>
+          <p class="bad">比如加价不到 5%，触发 <code>BidTooLow</code>。</p>
+          <p class="good">整笔回滚，存储不变。用户加价重试即可。EVM 交易是原子的，不存在改一半。</p>
+        </div>
+        <div class="card">
+          <span class="tag">B · 代码 bug</span>
+          <h3>新版逻辑写错了</h3>
+          <p class="bad">V2 的某个函数有漏洞。</p>
+          <p class="good">再部署 V3，owner 再调一次 <code>upgradeToAndCall</code>。注意：升级是整份实现一起换，不能只换一个函数。</p>
+        </div>
+        <div class="card">
+          <span class="tag">C · 数据不兼容</span>
+          <h3>老数据读出来是乱的</h3>
+          <p class="bad">V2 改了老变量的类型或顺序，旧值被错误解释。</p>
+          <p class="good">升级修不了存储。只能在新版本里写 <code>migrate()</code>，把老数据逐条转换成新格式。</p>
+        </div>
+        <div class="card">
+          <span class="tag">D · 升级失败</span>
+          <h3><code>initializeV2</code> 回滚</h3>
+          <p class="bad">升级交易里的初始化步骤失败。</p>
+          <p class="good">地址修改和初始化在同一笔交易里，会一起回滚。代理仍然指向旧实现，系统不受影响。</p>
+        </div>
+        <div class="card">
+          <span class="tag">E · 接口变化</span>
+          <h3>函数被删掉或改名</h3>
+          <p class="bad">老前端发来的选择器在新实现里不存在，直接 revert。</p>
+          <p class="good">保留旧函数签名，内部转调新函数；或者同步更新前端 ABI。</p>
+        </div>
+        <div class="card">
+          <span class="tag">F · 最坏情况</span>
+          <h3>升级函数本身被弄坏</h3>
+          <p class="bad">新实现删掉了 <code>upgradeToAndCall</code>，或改坏了权限检查。</p>
+          <p class="good">如果 owner 也无法再升级，合约就永久锁死。所以升级前必须测试，并保护好 owner 私钥。</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p><strong>回滚</strong>也是一次升级：把便利贴改回 V1 的地址。通常 V1 不读 V2 新增的变量，所以是安全的；但如果 V2 改过老数据的含义，回滚也会读到坏数据，仍然需要迁移。</p>
+      </div>
+    </section>
+
+    <!-- ========== 6. 自测 ========== -->
+    <section id="quiz">
+      <p class="eyebrow">06 / 自测</p>
+      <h2>三个问题，检验有没有真的懂</h2>
+      <p>先在心里回答，再点开。</p>
+
+      <div class="quiz">
+        <details>
+          <summary>代理合约里为什么找不到 <code>bid()</code> 的代码？</summary>
+          <p>因为代理不需要包含业务代码。它只需要在运行时从固定槽里读出一个地址，然后用 <code>delegatecall</code> 把原始 calldata 原封不动转发过去。代码由实现合约提供，存储和身份留在代理。</p>
+        </details>
+        <details>
+          <summary>升级到 V2 之后，升级前创建的拍卖数据会丢吗？</summary>
+          <p>不会。数据一直在代理的存储里，V2 只是换了一份代码来读同一批槽。前提是 V2 严格只追加新变量，没有改动老变量的顺序、类型或含义。</p>
+        </details>
+        <details>
+          <summary>当前最高出价者能调用 <code>WithdrawRefund</code> 把钱拿回去吗？</summary>
+          <p>不能。被记进 <code>pendingReturns</code> 的是「刚刚被顶掉的上一位出价者」，当前最高出价者的余额是 0，调用会被 <code>NothingToRefund</code> 拦住。这就是 pull-over-push 退款模式。</p>
+        </details>
+      </div>
+    </section>
+
+    <!-- ========== 7. 口诀 ========== -->
+    <section id="summary">
+      <p class="eyebrow">07 / 记住这几句</p>
+      <h2>一页纸总结</h2>
+
+      <p class="mnemonic">
+        地址在<strong>代理</strong>，代码在<strong>实现</strong>；<br>
+        数据在<strong>代理</strong>，权限在<strong>代理</strong>；<br>
+        升级只改<strong>便利贴</strong>。
+      </p>
+
+      <div class="action-grid">
+        <div class="action"><b>部署</b><span>写槽 + <code>delegatecall initialize</code></span></div>
+        <div class="action"><b>调用</b><span><code>fallback</code> → 读槽 → <code>delegatecall</code></span></div>
+        <div class="action"><b>升级</b><span>实现里的代码改写代理的槽 + 初始化</span></div>
+        <div class="action"><b>回滚</b><span>再升级一次，指回旧地址</span></div>
+      </div>
+
+      <div class="callout" style="margin-top:1.5rem">
+        <p>如果只能记住一件事：<strong>用户永远只跟代理地址交互；实现合约的地址只是一个可以更换的配置项。</strong></p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>对照代码：<code>contracts/homework03/NFTAuctionMarketProxy.sol</code>、<code>NFTAuctionMarket.sol</code>、<code>NFTAuctionMarketV2.sol</code>。图示中的地址来自本地 Hardhat 节点的一次真实部署，仅作演示。</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  var steps = [
+    {
+      title: "用户调用 bid()",
+      body: "用户在钱包里点「出价」。交易的目标地址是代理 P，不是实现合约。用户永远只跟代理打交道。",
+      step: 1
+    },
+    {
+      title: "代理找不到 bid",
+      body: "代理的字节码里只有构造器和 fallback。分发器拿 calldata 前 4 字节（bid 的选择器）逐个比对，一个都匹配不上。",
+      step: 2
+    },
+    {
+      title: "进入 fallback，读便利贴",
+      body: "fallback 调用 _implementation()，从固定槽 0x3608… 读出实现地址 0x9fE4…。代理不认识合约名，只认识这个地址。",
+      step: 3
+    },
+    {
+      title: "delegatecall 转发",
+      body: "代理用 delegatecall 把原始 calldata 原封不动发给实现合约。代码从实现借来执行，但存储、msg.sender、address(this) 都还是代理的。",
+      step: 4
+    },
+    {
+      title: "实现合约执行",
+      body: "实现合约在自己的字节码里找到了 bid，开始执行。它读写的 auctions、pendingReturns 全部落在代理的存储里；address(this) 是代理，所以 NFT 和 ETH 都托管在代理名下。",
+      step: 5
+    }
+  ];
+
+  var titleEl = document.getElementById("step-title");
+  var bodyEl = document.getElementById("step-body");
+  var counterEl = document.getElementById("step-counter");
+  var prevBtn = document.getElementById("prev");
+  var nextBtn = document.getElementById("next");
+  var dots = Array.prototype.slice.call(document.querySelectorAll(".dot"));
+  var targets = Array.prototype.slice.call(document.querySelectorAll("[data-step]"));
+  var idx = 0;
+
+  function render() {
+    var s = steps[idx];
+    titleEl.textContent = s.title;
+    bodyEl.textContent = s.body;
+    counterEl.textContent = "第 " + (idx + 1) + " / " + steps.length + " 步";
+    dots.forEach(function (d, i) {
+      d.classList.toggle("done", i <= idx);
+    });
+    targets.forEach(function (el) {
+      el.classList.toggle("is-active", Number(el.getAttribute("data-step")) === s.step);
+    });
+    prevBtn.disabled = idx === 0;
+    nextBtn.disabled = idx === steps.length - 1;
+  }
+
+  prevBtn.addEventListener("click", function () {
+    if (idx > 0) { idx -= 1; render(); }
+  });
+  nextBtn.addEventListener("click", function () {
+    if (idx < steps.length - 1) { idx += 1; render(); }
+  });
+
+  render();
+})();
+
+(function () {
+  var btn = document.getElementById("upgrade-toggle");
+  var slotValue = document.getElementById("slot-value");
+  var versionChip = document.getElementById("version-chip");
+  var linkV1 = document.getElementById("link-v1");
+  var linkV2 = document.getElementById("link-v2");
+  var v1Card = document.getElementById("v1-card");
+  var v2Card = document.getElementById("v2-card");
+  var rows = Array.prototype.slice.call(document.querySelectorAll(".storage-row"));
+  var upgraded = false;
+
+  function render() {
+    slotValue.textContent = upgraded ? "= 0x5FC8…" : "= 0x9fE4…";
+    versionChip.textContent = upgraded ? "version() = v2" : "version() = v1";
+    linkV1.classList.toggle("is-active", !upgraded);
+    linkV2.classList.toggle("is-active", upgraded);
+    v1Card.classList.toggle("dim", upgraded);
+    v2Card.classList.toggle("dim", !upgraded);
+    btn.textContent = upgraded ? "← 回滚到 V1" : "升级到 V2 →";
+    btn.setAttribute("aria-pressed", String(upgraded));
+
+    rows.forEach(function (row) {
+      row.classList.remove("flash");
+      void row.offsetWidth;
+      row.classList.add("flash");
+    });
+  }
+
+  btn.addEventListener("click", function () {
+    upgraded = !upgraded;
+    render();
+  });
+
+  render();
+})();
+</script>

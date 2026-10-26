@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>作业3 拍卖助手 · Sepolia</title>
+<style>
+  :root{
+    --bg:#0f172a; --panel:#16213e; --panel2:#1c2a4a; --text:#e8eefc; --muted:#9aa8c7;
+    --line:#2b3a5e; --accent:#5eead4; --accent2:#38bdf8; --danger:#fb7185; --ok:#4ade80; --warn:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:24px 16px 64px; background:radial-gradient(1200px 600px at 20% -10%, #1e3a8a55, transparent), var(--bg);
+    color:var(--text); font:15px/1.6 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+  }
+  .wrap{max-width:920px;margin:0 auto}
+  h1{font-size:24px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 20px}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--muted)}
+  .chip.ok{color:var(--ok);border-color:#166534}
+  .chip.bad{color:var(--danger);border-color:#7f1d1d}
+  button{
+    background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;
+    padding:10px 14px;font-size:14px;cursor:pointer;transition:.15s;
+  }
+  button:hover{border-color:var(--accent2);transform:translateY(-1px)}
+  button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+  button.primary{background:linear-gradient(135deg,#0ea5e9,#14b8a6);border:none;color:#04222b;font-weight:700}
+  button.danger{background:#7f1d1d;border-color:#b91c1c}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin:16px 0}
+  .card h2{font-size:17px;margin:0 0 14px}
+  label{display:inline-flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);margin:0 10px 10px 0}
+  input{
+    background:#0b1222;border:1px solid var(--line);border-radius:9px;color:var(--text);
+    padding:9px 11px;font-size:14px;min-width:180px;font-family:ui-monospace,Consolas,monospace;
+  }
+  input:focus{outline:none;border-color:var(--accent2)}
+  .hint{color:var(--muted);font-size:13px;margin:6px 0 12px}
+  .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px;padding-bottom:10px;border-bottom:1px dashed var(--line)}
+  .row:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+  .auction{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;background:#0b1222}
+  .auction.live{border-color:#0f766e;box-shadow:0 0 0 1px #0f766e55 inset}
+  .auction .title{font-weight:700;margin-bottom:4px}
+  .auction .meta{color:var(--muted);font-size:13px;word-break:break-all}
+  .auction .big{font-size:15px;color:var(--accent);font-family:ui-monospace,Consolas,monospace}
+  .tag{display:inline-block;font-size:12px;border-radius:999px;padding:1px 8px;margin-left:6px;border:1px solid var(--line);color:var(--muted)}
+  .tag.live{color:var(--ok);border-color:#166534}
+  .tag.ended{color:var(--danger);border-color:#7f1d1d}
+  #log{max-height:280px;overflow:auto;font-size:13px}
+  .log{padding:7px 10px;border-left:3px solid var(--line);margin-bottom:6px;background:#0b1222;border-radius:0 8px 8px 0;word-break:break-all}
+  .log.ok{border-color:var(--ok)}
+  .log.err{border-color:var(--danger);color:#fecdd3}
+  .log.warn{border-color:var(--warn)}
+  a{color:var(--accent2)}
+  code{font-family:ui-monospace,Consolas,monospace;background:#0b1222;padding:1px 5px;border-radius:5px}
+  .small{font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>作业3 拍卖助手</h1>
+  <p class="sub">Sepolia · NFT 拍卖市场 · 通过 Proxy 交互（不走 Etherscan，直接用你浏览器里的 MetaMask）</p>
+
+  <div class="chips">
+    <span id="walletChip" class="chip">钱包：未连接</span>
+    <span id="netChip" class="chip">网络：-</span>
+  </div>
+  <button id="connectBtn" class="primary">连接钱包 / 切换 Sepolia</button>
+
+  <section class="card">
+    <h2>账户与授权</h2>
+    <div id="accountInfo" class="meta small">连接后显示余额与授权</div>
+    <div style="margin-top:12px"><button id="refreshBtn">刷新状态</button></div>
+  </section>
+
+  <section class="card">
+    <h2>拍卖列表</h2>
+    <div id="auctionList" class="small">连接后读取链上数据</div>
+  </section>
+
+  <section class="card">
+    <h2>出价（用 C 账户）</h2>
+    <label>auctionId
+      <input id="bidId" type="number" min="0" step="1" value="1">
+    </label>
+    <label>amount（最小单位）
+      <input id="bidAmount" type="text" value="10500000">
+    </label>
+    <p class="hint">USDC 拍卖：10.5 USDC = <code>10500000</code>。手续费 Value 固定为 0，不需要填 ETH。</p>
+    <button id="bidBtn" class="primary">出价 bid</button>
+  </section>
+
+  <section class="card">
+    <h2>其他操作</h2>
+    <div class="row">
+      <label>auctionId
+        <input id="endId" type="number" min="0" step="1" value="1">
+      </label>
+      <button id="endBtn">结束拍卖 endAuction</button>
+    </div>
+    <div class="row">
+      <label>USDC 授权额度（最小单位）
+        <input id="approveAmount" type="text" value="10500000">
+      </label>
+      <button id="approveUsdcBtn">授权 USDC 给市场</button>
+    </div>
+    <div class="row">
+      <label>NFT tokenId
+        <input id="nftTokenId" type="number" min="0" step="1" value="1">
+      </label>
+      <button id="approveNftBtn">授权单个 NFT 给市场</button>
+      <button id="approveAllBtn">永久授权全部 NFT</button>
+    </div>
+    <div class="row">
+      <button id="createBtn">B：创建拍卖（tokenId 1 · 10 USDC 起拍 · 3600 秒）</button>
+    </div>
+    <p class="hint">创建拍卖前，B 必须先拥有 NFT 且已授权市场（见上一行）。</p>
+  </section>
+
+  <section class="card">
+    <h2>日志</h2>
+    <div id="log"></div>
+  </section>
+</div>
+
+<script>
+const PROXY = '0xb7abB83F14beBE8fbF8Ef11bF8A5f8352d957144';
+const USDC  = '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238';
+const NFT   = '0x671805845b699c5b5D3fDB2C9B9Cc2658D873087';
+const CHAIN_ID = '0xaa36a7'; // 11155111
+
+const SEL = {
+  bid: '0x598647f8',
+  endAuction: '0xb9a2de3a',
+  auctionCount: '0x2ad71573',
+  auctions: '0x571a26a0',
+  approve: '0x095ea7b3',
+  getApproved: '0x081812fc',
+  ownerOf: '0x6352211e',
+  allowance: '0xdd62ed3e',
+  balanceOf: '0x70a08231',
+  createAuction: '0x3ccaea2f',
+  setApprovalForAll: '0xa22cb465'
+};
+
+const ERR = {
+  '0x520d2ab8': 'AuctionEndedAlready：拍卖已结束（超过 endTime）',
+  '0xbbb81f80': 'AuctionNotEndedYet：拍卖还没到结束时间，请等 endTime 之后再结算',
+  '0x69b8d0fe': 'AuctionNotActive：拍卖不存在或已结算',
+  '0x37ed32e8': 'ReentrantCall：重入保护触发',
+  '0x3b1ab104': 'PayoutFailed：付款失败',
+  '0xef025889': 'SellerCannotBid：卖家不能出价',
+  '0x0ed02452': 'EthAmountMismatch：ETH 拍卖的 Value 必须等于 amount；USDC 拍卖 Value 必须为 0',
+  '0x6a172882': 'UnsupportedToken：这个 payToken 没有配置价格源',
+  '0xdf7badef': 'MarketNotApproved：NFT 没有授权给市场',
+  '0x59dc379f': 'NotTokenOwner：不是 NFT 持有者 / NFT 已被托管',
+  '0x4d84c2e9': 'BadDuration：duration 必须在 60 秒到 30 天之间',
+  '0xfd1ee349': 'BadPrice：startPrice 为 0，或价格源数据过期',
+  '0xa1f672bd': 'NoBidYet：已有出价，不能取消',
+  '0xf76aef65': 'NothingToRefund：没有可退款项',
+  '0x5274afe7': 'SafeERC20FailedOperation：代币转账失败'
+};
+
+let provider = null;
+let account = null;
+
+const $ = id => document.getElementById(id);
+const hexUint = n => BigInt(n).toString(16).padStart(64, '0');
+const hexAddr = a => a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
+const words = hex => (hex.slice(2).match(/[0-9a-f]{64}/gi) || []);
+const addrOf = w => '0x' + w.slice(24);
+const numOf = w => BigInt('0x' + w);
+const short = a => a ? a.slice(0, 6) + '…' + a.slice(-4) : '-';
+const fmt = (raw, dec = 6) => {
+  const s = raw.toString().padStart(dec + 1, '0');
+  const whole = s.slice(0, -dec), frac = s.slice(-dec).replace(/0{4,}$/, '');
+  return frac ? whole + '.' + frac : whole;
+};
+
+function pickProvider() {
+  const eth = window.ethereum;
+  if (!eth) throw new Error('没有检测到钱包扩展（window.ethereum 不存在）。请用装了 MetaMask 的浏览器打开本页。');
+  if (Array.isArray(eth.providers)) {
+    return eth.providers.find(p => p.isMetaMask) || eth.providers[0];
+  }
+  return eth;
+}
+
+function log(msg, kind = 'info') {
+  const el = document.createElement('div');
+  el.className = 'log ' + kind;
+  el.innerHTML = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  $('log').prepend(el);
+}
+
+function findHexData(e) {
+  const cands = [e?.data, e?.data?.data, e?.error?.data, e?.error?.data?.data, e?.info?.error?.data, e?.cause?.data];
+  for (const c of cands) if (typeof c === 'string' && /^0x[0-9a-fA-F]+$/.test(c)) return c;
+  return null;
+}
+
+function decodeError(e) {
+  const data = findHexData(e);
+  if (!data || data.length < 10) return e?.message || String(e);
+  const sel = data.slice(0, 10).toLowerCase();
+  const args = (data.slice(10).match(/[0-9a-f]{64}/gi) || []).map(w => BigInt('0x' + w));
+  if (sel === '0xf0defc61') return `BidTooLow：出价太低。你填 ${args[0]}，最低需要 ${args[1]}`;
+  if (sel === '0xda9becc8') return `ERC20InsufficientAllowance：USDC 授权不足。当前额度 ${args[1]}，spender ${'0x' + args[0].toString(16).padStart(40, '0')}`;
+  if (sel === '0xe450d38c') return `ERC20InsufficientBalance：USDC 余额不足。余额 ${args[1]}，需要 ${args[2]}`;
+  return (ERR[sel] || 'revert（未知错误 ' + sel + '）') + (args.length ? ' 参数：' + args.join(', ') : '');
+}
+
+async function ethCall(to, data) {
+  return provider.request({ method: 'eth_call', params: [{ to, data }, 'latest'] });
+}
+
+async function ensureSepolia() {
+  const chainId = await provider.request({ method: 'eth_chainId' });
+  if (chainId === CHAIN_ID) return chainId;
+  try {
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: CHAIN_ID }] });
+  } catch (e) {
+    const code = e?.code ?? e?.data?.originalError?.code;
+    if (code === 4902) {
+      await provider.request({ method: 'wallet_addEthereumChain', params: [{
+        chainId: CHAIN_ID,
+        chainName: 'Sepolia',
+        nativeCurrency: { name: 'SepoliaETH', symbol: 'SepoliaETH', decimals: 18 },
+        rpcUrls: ['https://ethereum-sepolia-rpc.publicnode.com'],
+        blockExplorerUrls: ['https://sepolia.etherscan.io']
+      }] });
+    } else {
+      throw e;
+    }
+  }
+  return await provider.request({ method: 'eth_chainId' });
+}
+
+async function simulate(to, data, value = '0x0') {
+  try {
+    await provider.request({ method: 'eth_call', params: [{ from: account, to, data, value }, 'latest'] });
+    return null;
+  } catch (e) {
+    return decodeError(e);
+  }
+}
+
+async function send(to, data, value = '0x0', label = '交易') {
+  if (!provider || !account) { log('请先连接钱包', 'err'); return; }
+  const err = await simulate(to, data, value);
+  if (err) { log(`模拟失败（未发送）：${err}`, 'err'); return; }
+  try {
+    const hash = await provider.request({ method: 'eth_sendTransaction', params: [{ from: account, to, data, value }] });
+    log(`已提交「${label}」：<a href="https://sepolia.etherscan.io/tx/${hash}" target="_blank" rel="noopener">${hash}</a>`, 'ok');
+    setTimeout(refresh, 4000);
+  } catch (e) {
+    log(`发送失败：${decodeError(e)}`, 'err');
+  }
+}
+
+async function refresh() {
+  if (!provider || !account) return;
+  try {
+    const chainId = await provider.request({ method: 'eth_chainId' });
+    $('netChip').textContent = '网络：' + (chainId === CHAIN_ID ? 'Sepolia (11155111) ✅' : chainId + ' ❌ 请切换');
+    $('netChip').className = 'chip ' + (chainId === CHAIN_ID ? 'ok' : 'bad');
+    $('walletChip').textContent = '钱包：' + short(account);
+    $('walletChip').className = 'chip ok';
+
+    const count = Number(BigInt(await ethCall(PROXY, SEL.auctionCount)));
+    const now = Math.floor(Date.now() / 1000);
+    let html = '';
+    for (let i = 0; i < count; i++) {
+      const w = words(await ethCall(PROXY, SEL.auctions + hexUint(i)));
+      if (w.length < 9) continue;
+      const a = {
+        seller: addrOf(w[0]), nft: addrOf(w[1]), tokenId: numOf(w[2]), payToken: addrOf(w[3]),
+        startPrice: numOf(w[4]), highestBid: numOf(w[5]), highestBidder: addrOf(w[6]),
+        endTime: Number(numOf(w[7])), active: numOf(w[8]) === 1n
+      };
+      const ended = now >= a.endTime;
+      const live = a.active && !ended;
+      const minBid = a.highestBid === 0n ? a.startPrice : a.highestBid + (a.highestBid * 500n) / 10000n;
+      const pay = a.payToken === '0x0000000000000000000000000000000000000000' ? 'ETH'
+        : (a.payToken.toLowerCase() === USDC.toLowerCase() ? 'USDC' : a.payToken);
+      html += `<div class="auction ${live ? 'live' : ''}">
+        <div class="title">拍卖 #${i}
+          <span class="tag ${live ? 'live' : 'ended'}">${live ? '进行中' : (a.active ? '已过期待结算' : '已结束')}</span>
+        </div>
+        <div class="meta">卖家 ${short(a.seller)} · NFT ${short(a.nft)} · tokenId ${a.tokenId} · 计价 ${pay}</div>
+        <div class="meta">起拍价 <b>${fmt(a.startPrice)}</b> · 最高出价 <b>${fmt(a.highestBid)}</b> · 最低可出价 <b class="big">${fmt(minBid)}</b></div>
+        <div class="meta">结束时间：${new Date(a.endTime * 1000).toLocaleString()} ${live ? `（剩 ${Math.max(0, a.endTime - now)} 秒）` : ''}</div>
+      </div>`;
+    }
+    $('auctionList').innerHTML = html || '<div class="small">还没有拍卖</div>';
+
+    const balHex = await ethCall(USDC, SEL.balanceOf + hexAddr(account));
+    const allowHex = await ethCall(USDC, SEL.allowance + hexAddr(account) + hexAddr(PROXY));
+    const bal = BigInt(balHex), allow = BigInt(allowHex);
+    $('accountInfo').innerHTML = `
+      <div>账户：<code>${account}</code></div>
+      <div>USDC 余额：<b>${fmt(bal)}</b>　USDC 授权给市场：<b>${fmt(allow)}</b></div>
+      <div>Proxy：<code>${PROXY}</code></div>`;
+  } catch (e) {
+    log('读取状态失败：' + decodeError(e), 'err');
+  }
+}
+
+$('connectBtn').onclick = async () => {
+  try {
+    provider = pickProvider();
+    const accs = await provider.request({ method: 'eth_requestAccounts' });
+    account = accs[0];
+    await ensureSepolia();
+    provider.on?.('accountsChanged', accs => { account = accs[0] || null; refresh(); });
+    provider.on?.('chainChanged', () => refresh());
+    log('钱包已连接：' + account, 'ok');
+    await refresh();
+  } catch (e) {
+    log('连接失败：' + decodeError(e), 'err');
+  }
+};
+
+$('refreshBtn').onclick = refresh;
+
+$('bidBtn').onclick = async () => {
+  const id = $('bidId').value.trim();
+  const amount = $('bidAmount').value.trim();
+  if (id === '' || amount === '') { log('请填写 auctionId 和 amount', 'err'); return; }
+  const data = SEL.bid + hexUint(id) + hexUint(amount);
+  await send(PROXY, data, '0x0', `出价 auction ${id} / ${amount}`);
+};
+
+$('endBtn').onclick = async () => {
+  const id = $('endId').value.trim();
+  if (id === '') { log('请填写 auctionId', 'err'); return; }
+  await send(PROXY, SEL.endAuction + hexUint(id), '0x0', `结束拍卖 ${id}`);
+};
+
+$('approveUsdcBtn').onclick = async () => {
+  const amount = $('approveAmount').value.trim();
+  if (amount === '') { log('请填写授权额度', 'err'); return; }
+  await send(USDC, SEL.approve + hexAddr(PROXY) + hexUint(amount), '0x0', `授权 USDC ${amount}`);
+};
+
+$('approveNftBtn').onclick = async () => {
+  const tokenId = $('nftTokenId').value.trim();
+  if (tokenId === '') { log('请填写 tokenId', 'err'); return; }
+  await send(NFT, SEL.approve + hexAddr(PROXY) + hexUint(tokenId), '0x0', `授权 NFT #${tokenId}`);
+};
+
+$('approveAllBtn').onclick = async () => {
+  await send(NFT, SEL.setApprovalForAll + hexAddr(PROXY) + hexUint(1), '0x0', '永久授权全部 NFT');
+};
+
+$('createBtn').onclick = async () => {
+  const tokenId = $('nftTokenId').value.trim() || '1';
+  const data = SEL.createAuction
+    + hexAddr(NFT)
+    + hexUint(tokenId)
+    + hexAddr(USDC)
+    + hexUint(10000000)
+    + hexUint(3600);
+  await send(PROXY, data, '0x0', `创建拍卖 tokenId ${tokenId}`);
+};
+
+setInterval(() => { if (provider && account) refresh(); }, 15000);
+</script>
+</body>
+</html>
